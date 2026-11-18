@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco model="pen_cap_task">
+  <!-- Coordinates are metres. The tabletop is z=0.75; the SO-101 base sits on it.
+       The three source STLs use millimetres and are scaled by 0.001 below.
+       Their local +Z axes run along the marker/cap; the holder's STL bounds are
+       x=[-58,28], y=[8,80], z=[-74,18] mm. Initial object poses are staging
+       poses, not a preassembled cap-on-marker state. -->
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+    <rgba haze="1 1 1 1"/>
+  </visual>
+  <asset>
+    <!-- The camera variant uses TheRobotStudio's SO-101 hex-nut wrist camera
+         mount and a published OV2710 lens pose. The original calibrated robot
+         XML is preserved alongside it. Match this mount to the real hardware. -->
+    <model name="so101" file="../robots/so101_arm/so101_new_calib_wrist_camera.xml"/>
+    <!-- MuJoCo's STL loader requires binary STL; sharpie_binary.stl is a
+         geometry-identical conversion of the original ASCII sharpie.stl. -->
+    <mesh name="marker_mesh" file="../assets/sharpie_binary.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="cap_mesh" file="../assets/Sharpie_Cap.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="holder_mesh" file="../assets/sharpie_holder_x30.stl" scale="0.001 0.001 0.001"/>
+    <material name="table_mat" rgba="0.88 0.90 0.92 1"/>
+    <material name="marker_mat" rgba="0.16 0.17 0.19 1"/>
+    <material name="cap_mat" rgba="0.10 0.12 0.15 1"/>
+    <material name="holder_mat" rgba="0.55 0.59 0.64 1"/>
+  </asset>
+
+  <worldbody>
+    <light name="key" pos="-0.2 -0.3 2.0" dir="0.2 0.2 -1" diffuse="1 1 1"/>
+    <!-- Fixed overhead RGB view. Its position and intrinsics are provisional
+         until the physical camera is measured. The second camera is mounted
+         on the attached robot's camera body and moves with the gripper. -->
+    <camera name="overhead" pos="0 0 1.40" zaxis="0 0 1" fovy="50" resolution="640 480"/>
+    <geom name="floor" type="plane" pos="0 0 0" size="2 2 0.1" rgba="1 1 1 1"/>
+    <geom name="backdrop" type="plane" pos="0 0.75 0.8" euler="90 0 0" size="2 2 0.1" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+
+    <!-- Table: top face z=0.75 m. -->
+    <geom name="table" type="box" pos="0 0 0.725" size="0.55 0.40 0.025"
+          material="table_mat" friction="1.2 0.01 0.001"/>
+
+    <!-- Attach the robot's world body so its own joints, actuators and mesh paths
+         remain defined by the original, unmodified XML. -->
+    <body name="robot_mount" pos="-0.22 0 0.75">
+      <attach model="so101" prefix="robot_"/>
+    </body>
+
+    <!-- Holder STL is offset so its measured minimum Z touches the tabletop.
+         This visual is static; the separate collision mesh provides contact. -->
+    <body name="holder" pos="0.12 0.02 0.824">
+      <geom name="holder_visual" type="mesh" mesh="holder_mesh" material="holder_mat"
+            contype="0" conaffinity="0" group="2"/>
+      <geom name="holder_collision" type="mesh" mesh="holder_mesh" rgba="0 0 0 0"
+            friction="1.1 0.01 0.001" group="3"/>
+    </body>
+
+    <!-- Marker and cap are independent free bodies. Primitive collision shapes
+         approximate the narrow marker tip and the cap's open lower 22 mm so
+         the cap can slide over the tip. Explicit inertias keep masses
+         independent of the visual STL geometry. -->
+    <body name="marker" pos="0.015 -0.10 0.75615" quat="0.70710678 0 0.70710678 0">
+      <freejoint name="marker_free"/>
+      <inertial pos="0 0 0" mass="0.014" diaginertia="0.0000185 0.0000185 0.00000027"/>
+      <geom name="marker_visual" type="mesh" mesh="marker_mesh" pos="0 0 -0.06277"
+            material="marker_mat" contype="0" conaffinity="0" group="2"/>
+      <geom name="marker_barrel_collision" type="cylinder" pos="0 0 0.010" size="0.00615 0.05277"
+            friction="1.0 0.01 0.001" rgba="0 0 0 0" group="3"/>
+      <geom name="marker_neck_collision" type="cylinder" pos="0 0 -0.04777" size="0.0048 0.005"
+            friction="1.0 0.01 0.001" rgba="0 0 0 0" group="3"/>
+      <geom name="marker_tip_collision" type="cylinder" pos="0 0 -0.05777" size="0.00285 0.005"
+            friction="1.0 0.01 0.001" rgba="0 0 0 0" group="3"/>
+    </body>
+
+    <body name="cap" pos="0.005 0.13 0.776">
+      <freejoint name="cap_free"/>
+      <inertial pos="0 0 0" mass="0.004" diaginertia="0.0000010 0.0000010 0.000000085"/>
+      <geom name="cap_visual" type="mesh" mesh="cap_mesh" pos="0 0 -0.026"
+            material="cap_mat" contype="0" conaffinity="0" group="2"/>
+      <!-- Eight wall strips leave a central opening. A solid upper section
+           represents the closed end; this is an approximation of the STL. -->
+      <geom name="cap_closed_end" type="cylinder" pos="0 0 0.011" size="0.0050 0.015"
+            friction="1.0 0.01 0.001" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_0" type="box" pos="0.0059 0 -0.015" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_45" type="box" pos="0.004172 0.004172 -0.015" euler="0 0 0.785398" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_90" type="box" pos="0 0.0059 -0.015" euler="0 0 1.570796" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_135" type="box" pos="-0.004172 0.004172 -0.015" euler="0 0 2.356194" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_180" type="box" pos="-0.0059 0 -0.015" euler="0 0 3.141593" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_225" type="box" pos="-0.004172 -0.004172 -0.015" euler="0 0 3.926991" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_270" type="box" pos="0 -0.0059 -0.015" euler="0 0 4.712389" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+      <geom name="cap_wall_315" type="box" pos="0.004172 -0.004172 -0.015" euler="0 0 5.497787" size="0.0006 0.00225 0.011" rgba="0 0 0 0" group="3"/>
+    </body>
+  </worldbody>
+
+  <statistic center="-0.02 0 0.80" extent="0.55"/>
+</mujoco>
